@@ -1,0 +1,1 @@
+In antigen_cage project, there are two input folders: antigen and cage. Both includes some fasta files, including the DNA sequence ordered. The goal of this project is to combine selected antigen sequences with selected cage sequences and output them into the output folder. 
