@@ -7,7 +7,7 @@ A toolkit for combining antigen and cage DNA sequences and inserting them into a
 The workflow has two steps:
 
 1. **`combine.py`** — selects antigen and cage sequences from FASTA files, strips overhangs, and joins them into a combined sequence.
-2. **`insert.py`** — inserts each combined sequence into a GenBank backbone at a specified site, updates all feature annotations, and translates the inserted CDS.
+2. **`insert.py`** — inserts each combined sequence into a GenBank backbone at a specified site and updates all feature annotations. Requires BioPython; must be run via the Singularity container (see below).
 
 ---
 
@@ -19,10 +19,17 @@ antigen_cage/
 ├── cage/             # Cage FASTA files
 ├── backbone/         # GenBank backbone file(s)
 ├── output/           # Generated combined FASTA files
-│   └── inserted/     # Generated GenBank and protein files
-├── combine.py
-└── insert.py
+│   └── inserted/     # Generated GenBank files
+├── combine.py        # No dependencies — runs with plain python
+└── insert.py         # Requires BioPython — run via Singularity
 ```
+
+## Requirements
+
+| Script | Runtime |
+|--------|---------|
+| `combine.py` | Plain `python` (no dependencies) |
+| `insert.py` | `singularity exec /net/software/containers/universal.sif python` (BioPython required) |
 
 ---
 
@@ -104,7 +111,7 @@ An exception is raised if a sequence does not contain the expected overhang.
 
 ## Step 2 — Insert into GenBank backbone
 
-> Requires BioPython. Run via the Singularity container:
+> **Requires BioPython.** BioPython is not available in the default Python environment and must be accessed via the Singularity container:
 > ```bash
 > singularity exec /net/software/containers/universal.sif python insert.py ...
 > ```
@@ -122,7 +129,7 @@ singularity exec /net/software/containers/universal.sif python insert.py \
 |----------|-------------|
 | `insertion.fasta` | FASTA file with sequences to insert (e.g. output of `combine.py`) |
 | `backbone.gb` | GenBank backbone file |
-| `insertion_site` | 1-based position; insertion happens **after** this position |
+| `insertion_site` | 1-based position; insertion starts **at** this position |
 | `--output-dir` | Output directory (default: `output`) |
 
 ### Example
@@ -140,11 +147,10 @@ singularity exec /net/software/containers/universal.sif python insert.py \
 | File | Description |
 |------|-------------|
 | `output/inserted/{ID}.gb` | One GenBank file per inserted sequence, with all downstream features shifted |
-| `output/inserted/proteins.faa` | FASTA file with translated protein sequences for all insertions |
 
 ### Sequence validation
 
-Each insertion sequence is validated and translated. Warnings are printed to stderr if:
+Warnings are printed to stderr if:
 - The sequence does not start with `ATG`
 - There are premature stop codons
 - The sequence does not end with a stop codon

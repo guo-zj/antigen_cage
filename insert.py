@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Insert sequences from a FASTA file into a GenBank backbone at a given site,
-and translate each insertion sequence.
+Insert sequences from a FASTA file into a GenBank backbone at a given site.
 
 Usage:
     python insert.py <insertion.fasta> <backbone.gb> <insertion_site> [--output-dir DIR]
 
-insertion_site: 1-based position; sequences are inserted AFTER this position.
+insertion_site: 1-based position; insertion starts AT this position.
 """
 
 import argparse
+import re
 import sys
 from copy import deepcopy
 from pathlib import Path
@@ -21,14 +21,10 @@ from Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation
 
 
 # ---------------------------------------------------------------------------
-# Translation helpers
+# Sequence validation
 # ---------------------------------------------------------------------------
 
-def translate_and_validate(dna: str, label: str) -> str:
-    """
-    Translate dna, check for ATG start and stop codon, warn on premature stops.
-    Returns the protein string (with trailing *).
-    """
+def validate(dna: str, label: str) -> None:
     dna = dna.upper()
     issues = []
 
@@ -47,7 +43,22 @@ def translate_and_validate(dna: str, label: str) -> str:
     for msg in issues:
         print(f"WARNING [{label}]: insertion sequence {msg}", file=sys.stderr)
 
-    return protein
+
+# ---------------------------------------------------------------------------
+# GenBank post-processing
+# ---------------------------------------------------------------------------
+
+def fix_locus_name(gb_path: Path, full_name: str) -> None:
+    """Replace the LOCUS name (truncated by BioPython) with the full label."""
+    text = gb_path.read_text()
+    text = re.sub(
+        r"^(LOCUS\s+)\S+",
+        lambda m: m.group(1) + full_name,
+        text,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    gb_path.write_text(text)
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +96,7 @@ def insert_into_backbone(
     Insert ins_seq into backbone after 1-based position site_1based.
     Returns a new SeqRecord with updated features.
     """
-    split = site_1based          # 0-based split index (insert after 1-based N = split at 0-based N)
+    split = site_1based - 1      # 0-based split index: insert BEFORE 1-based position N
     ins_len = len(ins_seq)
     original = str(backbone.seq)
 
@@ -115,16 +126,15 @@ def insert_into_backbone(
         qualifiers={
             "label": [label],
             "note": ["inserted sequence"],
-            "translation": [str(Seq(ins_seq.upper()).translate(to_stop=True))],
         },
     )
     new_features.append(ins_feature)
 
     new_record = SeqRecord(
         Seq(new_seq_str),
-        id=backbone.id,
-        name=backbone.name[:16],   # GenBank name ≤ 16 chars
-        description=f"{backbone.description} | {label}",
+        id=label,
+        name=label[:16],           # LOCUS name field, ≤ 16 chars
+        description=label,
         features=new_features,
         annotations=deepcopy(backbone.annotations),
     )
@@ -160,36 +170,18 @@ def main():
         print("ERROR: no sequences found in insertion FASTA.", file=sys.stderr)
         sys.exit(1)
 
-    protein_records = []
-
     for rec in insertions:
         label = rec.id
         ins_seq = str(rec.seq).upper()
 
-        # Validate and translate
-        protein = translate_and_validate(ins_seq, label)
+        validate(ins_seq, label)
 
-        # Build new GenBank record
         new_record = insert_into_backbone(backbone, ins_seq, args.insertion_site, label)
 
-        # Write GenBank file
         gb_out = output_dir / f"{label}.gb"
         SeqIO.write(new_record, gb_out, "genbank")
+        fix_locus_name(gb_out, label)
         print(f"Written {gb_out}  ({len(new_record)} bp)")
-
-        # Collect protein
-        protein_records.append(
-            SeqRecord(
-                Seq(protein),
-                id=label,
-                description="translated insertion",
-            )
-        )
-
-    # Write all protein translations to a single FASTA
-    prot_out = output_dir / "proteins.faa"
-    SeqIO.write(protein_records, prot_out, "fasta")
-    print(f"Written protein translations to {prot_out}")
 
 
 if __name__ == "__main__":
