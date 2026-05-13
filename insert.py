@@ -141,6 +141,7 @@ def insert_into_backbone(
     new_record.annotations["molecule_type"] = backbone.annotations.get(
         "molecule_type", "DNA"
     )
+    new_record.annotations["topology"] = "circular"
     return new_record
 
 
