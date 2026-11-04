@@ -1,0 +1,11 @@
+python combine.py \
+    antigen/20260430_twist.fasta \
+    cage/20260623IDT.fasta \
+    A3C1 A3C2 A3C3 A3C4 A3C5 A3C6 A3C7 A3C8 \
+    --output-dir output
+    
+singularity exec /net/software/containers/universal.sif python insert.py \
+    output/combined.fasta \
+    backbone/CMVR_insertto1386.gb \
+    1386 \
+    --output-dir output/inserted
