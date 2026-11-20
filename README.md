@@ -4,8 +4,9 @@ A toolkit for combining antigen and cage DNA sequences and inserting them into a
 
 ## Overview
 
-The workflow has two steps:
+The workflow has two steps, plus an optional step in front of them:
 
+0. **`csv2fasta.py`** *(optional)* — converts a CSV downloaded from an order portal into a FASTA file in the format the next step expects, using overhangs you supply separately.
 1. **`combine.py`** — prepares the sequence(s) to insert. In the default **two-part mode** it selects antigen and cage sequences from two FASTA files, strips overhangs, and joins them. In **single-part mode** (`--single`) it takes one FASTA file, strips both overhangs off each selected sequence, and writes them out without joining anything.
 2. **`insert.py`** — inserts each combined sequence into a GenBank backbone at a specified site and updates all feature annotations. Requires BioPython; must be run via the Singularity container (see below).
 
@@ -21,6 +22,7 @@ antigen_cage/
 ├── backbone/         # GenBank backbone file(s)
 ├── output/           # Generated combined FASTA files
 │   └── inserted/     # Generated GenBank files (one per combination)
+├── csv2fasta.py      # No dependencies — order CSV → FASTA (optional Step 0)
 ├── combine.py        # No dependencies — runs with plain python
 └── insert.py         # Requires BioPython — run via Singularity
 ```
@@ -29,6 +31,7 @@ antigen_cage/
 
 | Script | Runtime |
 |--------|---------|
+| `csv2fasta.py` | Plain `python` (no dependencies) |
 | `combine.py` | Plain `python` (no dependencies) |
 | `insert.py` | `singularity exec /net/software/containers/universal.sif python` (BioPython required) |
 
@@ -58,6 +61,56 @@ GATCAGATATCGCGGCCGCTCTAGAGCCACC...GGGGAGCTGGCATATAAACTC
 >A2_His6-TH-WI22-M181I
 ...
 ```
+
+---
+
+## Step 0 (optional) — Convert a downloaded order CSV to FASTA
+
+Order portals (Twist, IDT) let you download the ordered constructs as a CSV.
+`csv2fasta.py` turns such a file into a FASTA in the format above, ready for Step 1.
+
+Each CSV row becomes one record: the **`Name`** column is the header and the
+**`Insert Sequence`** column is the sequence. Column names are matched ignoring
+case, spaces and underscores, so `Insert sequence` works too.
+
+The overhangs are **not** read from the CSV — you supply them yourself, either as a
+small FASTA file (see `full_insertion/overhangs.fasta`) or inline. They are written
+as the first two entries of the output so Step 1 can find them.
+
+### Usage
+
+```bash
+python csv2fasta.py <order.csv> <overhangs.fasta> [--output-dir DIR] [--output-name NAME]
+python csv2fasta.py <order.csv> --five <5overhang> --three <3overhang> [...]
+```
+
+### Arguments
+
+| Argument | Description |
+|----------|-------------|
+| `order.csv` | The downloaded CSV |
+| `overhangs.fasta` | FASTA holding one `<prefix>_5overhang` and one `<prefix>_3overhang` entry; their headers are copied through to the output |
+| `--five` / `--three` | The overhang sequences given inline instead of in a file (both required; not combinable with `overhangs.fasta`) |
+| `--name-column` | Column holding the record name (default: `Name`) |
+| `--sequence-column` | Column holding the sequence (default: `Insert Sequence`) |
+| `--output-dir` | Output directory (default: `full_insertion`) |
+| `--output-name` | Output file name (default: the CSV's name with a `.fasta` extension) |
+
+### Example
+
+```bash
+python csv2fasta.py ~/Downloads/'Gene draft 7.csv' \
+    full_insertion/overhangs.fasta \
+    --output-name 20261113_twist.fasta
+```
+
+### Checks
+
+The file is still written, but a warning is printed to stderr if a sequence contains
+non-`ACGT` characters, does not start with the 5′ overhang, or does not end with the
+3′ overhang — the usual sign that the CSV belongs to a different order than the
+overhangs given. The script exits with an error on a missing column, a missing or
+empty `Name`/`Insert Sequence` cell, or a duplicate name.
 
 ---
 
